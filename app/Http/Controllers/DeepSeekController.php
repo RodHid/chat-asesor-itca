@@ -74,13 +74,15 @@ class DeepSeekController extends Controller
 
             // Preparar prompt para DeepSeek
             $customPrompt = "Responde ÚNICAMENTE basado en el siguiente texto extraído del documento PDF. "
-                . "Si la información no está en el texto, responde: 'No está en el documento'.\n\n"
-                . "Texto del documento:\n" . $text . "\n\n"
-                . "Pregunta: " . $request->question . "\n\n"
-                . "Instrucciones:\n"
-                . "- Sé preciso y conciso\n"
-                . "- No inventes información\n"
-                . "- Cita secciones relevantes si es posible";
+            . "Si la información no está en el texto, responde: 'No está en el documento'.\n\n"
+            . "Texto del documento:\n" . $text . "\n\n"
+            . "Pregunta: " . $request->question . "\n\n"
+            . "Instrucciones:\n"
+            . "- Sé preciso y conciso\n"
+            . "- No inventes información\n"
+            . "- Cita secciones relevantes si es posible\n"
+            . "- No utilices formato Markdown, ni HTML, ni símbolos como asteriscos, guiones dobles, comillas dobles o triples\n"
+            . "- Da la respuesta como texto plano, sin ningún tipo de formato";
 
             $payload = [
                 'model' => 'deepseek-chat',

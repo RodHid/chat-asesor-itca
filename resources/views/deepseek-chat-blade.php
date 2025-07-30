@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat con Documento - DeepSeek API</title>
+    <title>Asesor vocacional</title>
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
@@ -180,14 +180,31 @@
             <div class="col-md-10 col-lg-8">
                 <div class="text-center mb-4">
                     <h1 class="fw-bold" style="color: #4a6cf7;">
-                        <i class="bi bi-robot"></i> Asesor Chat
+                        <i class="bi bi-robot"></i> Asesor vocacional
                     </h1>
-                </div>                
+                </div>
+                
                 <div class="chat-container">
                     <div class="chat-header">
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 <h5 class="mb-0"><i class="bi bi-chat-dots me-2"></i>Chat</h5>
+                            </div>
+                            <div>
+                                <span class="status-badge">
+                                    <i class="bi bi-circle-fill"></i> Conectado
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="document-info mt-3" hidden>
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-file-earmark-pdf pdf-icon"></i>
+                                <strong>Documento actual:</strong>
+                            </div>
+                            <div class="mt-1 d-flex align-items-center">
+                                <span class="document-badge">PDF</span>
+                                <span id="documentUrl">documento-configurado.pdf</span>
                             </div>
                         </div>
                     </div>
@@ -221,8 +238,8 @@
                         <form id="documentForm">
                             <div class="input-group">
                                 <textarea class="form-control" id="question" rows="1" 
-                                          placeholder="Escribe tu pregunta sobre el documento..." 
-                                          style="resize: none; min-height: 50px;" required></textarea>
+                                    placeholder="Escribe tu pregunta sobre el documento..." 
+                                    style="resize: none; min-height: 50px;" required></textarea>
                                 <button class="btn btn-primary" type="submit" id="submitBtn">
                                     <i class="bi bi-send-fill"></i>
                                 </button>
@@ -244,7 +261,7 @@
     
     <script>
         // URL del documento predefinida
-        const DOCUMENT_URL = "{{ env('INFO_CHAT_DOCUMENT', 'https://www.itca.edu.sv/wp-content/uploads/2024/10/GuiaEstudiantil2025_compressed.pdf') }}";
+        const DOCUMENT_URL = "{{ env('INFO_CHAT_DOCUMENT', 'https://www.itca.edu.sv/wp-content/uploads/2024/10/GuiaEstudiantil2025_compressed.pdf')}}";
         const DOCUMENT_NAME = DOCUMENT_URL.split('/').pop() || 'GuiaEstudiantil2025_compressed.pdf';
         
         // Mostrar nombre del documento en la interfaz
