@@ -74,7 +74,7 @@ class DeepSeekController extends Controller
 
             // Preparar prompt para DeepSeek
             $customPrompt = "Responde ÚNICAMENTE basado en el siguiente texto extraído del documento PDF. "
-            . "Si la información no está en el texto, responde: 'No está en el documento'.\n\n"
+            . "Si la información no está en el texto, responde: 'Por el momento no puedo responder esa pregunta, para mas información visita " . self::INFO_CHAT_DOCUMENT . "'.\n\n"
             . "Texto del documento:\n" . $text . "\n\n"
             . "Pregunta: " . $request->question . "\n\n"
             . "Instrucciones:\n"
