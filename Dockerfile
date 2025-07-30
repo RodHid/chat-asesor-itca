@@ -1,20 +1,24 @@
-FROM richarvey/nginx-php-fpm:1.7.2
+FROM php:8.2-fpm
 
-COPY . .
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    libzip-dev unzip curl git zip \
+    && docker-php-ext-install pdo pdo_mysql zip
 
-# Image config
-ENV SKIP_COMPOSER 1
-ENV WEBROOT /var/www/html/public
-ENV PHP_ERRORS_STDERR 1
-ENV RUN_SCRIPTS 1
-ENV REAL_IP_HEADER 1
+# Install Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Laravel config
-ENV APP_ENV production
-ENV APP_DEBUG false
-ENV LOG_CHANNEL stderr
+# Copy app files
+COPY . /var/www/html
+WORKDIR /var/www/html
 
-# Allow composer to run as root
-ENV COMPOSER_ALLOW_SUPERUSER 1
+# Install dependencies
+RUN composer install --no-dev --optimize-autoloader
 
-CMD ["/start.sh"]
+# Set permissions
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+
+# Run Laravel commands
+RUN php artisan config:clear && php artisan route:clear
+
+CMD php artisan serve --host=0.0.0.0 --port=10000
