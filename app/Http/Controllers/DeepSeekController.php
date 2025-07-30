@@ -80,6 +80,7 @@ class DeepSeekController extends Controller
             . "Instrucciones:\n"
             . "- Sé preciso y conciso\n"
             . "- No inventes información\n"
+            . "- Responde solo con información del texto proporcionado\n"
             . "- Cita secciones relevantes si es posible\n"
             . "- No utilices formato Markdown, ni HTML, ni símbolos como asteriscos, guiones dobles, comillas dobles o triples\n"
             . "- Da la respuesta como texto plano, sin ningún tipo de formato";
