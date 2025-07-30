@@ -213,13 +213,7 @@
                         <div class="message bot-message">
                             <div class="message-content">
                                 <strong><i class="bi bi-robot"></i> Asistente:</strong>
-                                <p class="mb-0">¡Hola! Estoy listo para responder tus preguntas sobre el documento predefinido. Puedes preguntarme sobre cualquier aspecto de su contenido.</p>
-                                <p class="mt-2 mb-0">Por ejemplo: </p>
-                                <ul class="mt-1">
-                                    <li>¿Cuál es el tema principal del documento?</li>
-                                    <li>Resume los puntos clave del capítulo 3</li>
-                                    <li>Explica el concepto X mencionado en la página 15</li>
-                                </ul>
+                                <p class="mb-0">¡Hola! Estoy listo para responder tus preguntas sobre ITCA-FEPADE.</p>
                             </div>
                             <div class="message-time">Ahora</div>
                         </div>
