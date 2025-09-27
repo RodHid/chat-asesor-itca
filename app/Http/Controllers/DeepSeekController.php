@@ -63,37 +63,117 @@ class DeepSeekController extends Controller
             $pdf = $parser->parseFile($filePath);
             $text = $pdf->getText();
 
-            // // Limitar el texto para evitar exceso de tokens (ejemplo: máximo 30000 caracteres)
-            // $maxLength = 30000;
-            // if (strlen($text) > $maxLength) {
-            //     $text = substr($text, 0, $maxLength) . "\n\n[Texto truncado para cumplir con límite de tokens]";
-            // }
-
             // Eliminar archivo temporal después de extraer texto
             Storage::disk('local')->delete($tempFileName);
 
-            // Preparar prompt para DeepSeek
-            $customPrompt = "Responde ÚNICAMENTE basado en el siguiente texto extraído del documento PDF. "
-            . "Si la información no está en el texto, responde: 'Por el momento no puedo responder esa pregunta, para mas información visita el sitio web de ITCA-FEPADE o visita " . self::INFO_CHAT_DOCUMENT . "'.\n\n"
-            . "Texto del documento:\n" . $text . "\n\n"
-            . "Pregunta: " . $request->question . "\n\n"
+            // Dividir el texto en fragmentos manejables
+            $maxLength = 30000;
+            $textChunks = $this->splitTextIntoChunks($text, $maxLength);
+
+            // Procesar cada fragmento y buscar la respuesta
+            $finalResponse = null;
+            $responses = [];
+
+            foreach ($textChunks as $index => $chunk) {
+                $chunkResponse = $this->processTextChunk($chunk, $request->question, $index + 1, count($textChunks));
+                
+                if ($chunkResponse) {
+                    $responses[] = $chunkResponse;
+                    
+                    // Si encontramos una respuesta específica (no el mensaje por defecto), la usamos
+                    if (!str_contains($chunkResponse, 'Por el momento no puedo responder esa pregunta')) {
+                        $finalResponse = $chunkResponse;
+                        break; // Salir del bucle si encontramos una respuesta válida
+                    }
+                }
+            }
+
+            // Si no encontramos respuesta específica en ningún fragmento, combinar respuestas o dar mensaje por defecto
+            if (!$finalResponse) {
+                if (empty($responses)) {
+                    $finalResponse = 'Por el momento no puedo responder esa pregunta, para más información visita el sitio web de ITCA-FEPADE o visita ' . self::INFO_CHAT_DOCUMENT;
+                } else {
+                    // Si todas las respuestas son el mensaje por defecto, usar una sola
+                    $finalResponse = $responses[0];
+                }
+            }
+
+            return response()->json([
+                'response' => $finalResponse,
+                'chunks_processed' => count($textChunks),
+                'total_length' => strlen($text)
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('DeepSeek Error Interno', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'error' => 'Error interno',
+                'exception_message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Divide el texto en fragmentos manejables respetando palabras completas
+     */
+    private function splitTextIntoChunks($text, $maxLength)
+    {
+        $chunks = [];
+        $textLength = strlen($text);
+        $currentPosition = 0;
+
+        while ($currentPosition < $textLength) {
+            $chunkSize = min($maxLength, $textLength - $currentPosition);
+            $chunk = substr($text, $currentPosition, $chunkSize);
+
+            // Si no es el último fragmento, buscar el último espacio para no cortar palabras
+            if ($currentPosition + $chunkSize < $textLength) {
+                $lastSpace = strrpos($chunk, ' ');
+                if ($lastSpace !== false && $lastSpace > $chunkSize * 0.8) {
+                    $chunk = substr($chunk, 0, $lastSpace);
+                    $chunkSize = $lastSpace;
+                }
+            }
+
+            $chunks[] = trim($chunk);
+            $currentPosition += $chunkSize;
+        }
+
+        return $chunks;
+    }
+
+    /**
+     * Procesa un fragmento de texto individual con DeepSeek
+     */
+    private function processTextChunk($textChunk, $question, $chunkNumber, $totalChunks)
+    {
+        try {
+            // Preparar prompt para DeepSeek con contexto del fragmento
+            $customPrompt = "Responde ÚNICAMENTE basado en el siguiente fragmento de texto extraído del documento PDF (fragmento {$chunkNumber} de {$totalChunks}). "
+            . "Si la información específica para responder la pregunta no está en este fragmento, responde: 'Por el momento no puedo responder esa pregunta, para más información visita el sitio web de ITCA-FEPADE o visita " . self::INFO_CHAT_DOCUMENT . "'.\n\n"
+            . "Fragmento del documento:\n" . $textChunk . "\n\n"
+            . "Pregunta: " . $question . "\n\n"
             . "Instrucciones:\n"
-            . "- Responde ÚNICAMENTE basado en el texto proporcionado\n"
+            . "- Responde ÚNICAMENTE basado en el fragmento de texto proporcionado\n"
             . "- Responde siempre en español\n"
             . "- Sé preciso y conciso\n"
             . "- No inventes información\n"
-            . "- Responde solo con información del texto proporcionado\n"
+            . "- Responde solo con información del fragmento proporcionado\n"
             . "- Responde utilizando la información exacta del documento proporcionado\n"
             . "- Cita secciones relevantes si es posible\n"
-            // . "- No utilices formato Markdown, ni HTML, ni símbolos como asteriscos, guiones dobles, comillas dobles o triples\n"
-            . "- Da la respuesta como texto plano, sin ningún tipo de formato";
+            . "- Da la respuesta como texto plano, sin ningún tipo de formato\n"
+            . "- Si encuentras información relevante, proporciona una respuesta completa y detallada";
 
             $payload = [
                 'model' => 'deepseek-chat',
                 'messages' => [
                     [
                         'role' => 'system',
-                        'content' => 'Eres un experto en comprensión de documentos PDF. Usa exclusivamente el texto proporcionado.'
+                        'content' => 'Eres un experto en comprensión de documentos PDF. Usa exclusivamente el fragmento de texto proporcionado para responder.'
                     ],
                     [
                         'role' => 'user',
@@ -110,27 +190,16 @@ class DeepSeekController extends Controller
             ])->timeout(60)->post('https://api.deepseek.com/v1/chat/completions', $payload);
 
             if ($deepseekResponse->successful()) {
-                $content = $deepseekResponse->json()['choices'][0]['message']['content'];
-                return response()->json([
-                    'response' => $content
-                ]);
+                $responseData = $deepseekResponse->json();
+                return $responseData['choices'][0]['message']['content'] ?? null;
             }
 
-            return response()->json([
-                'error' => 'Error en la API de DeepSeek',
-                'details' => $deepseekResponse->json()
-            ], 500);
+            \Log::warning("Error procesando fragmento {$chunkNumber}: " . $deepseekResponse->body());
+            return null;
 
         } catch (\Exception $e) {
-            \Log::error('DeepSeek Error Interno', [
-                'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'error' => 'Error interno',
-                'exception_message' => $e->getMessage()
-            ], 500);
+            \Log::error("Error procesando fragmento {$chunkNumber}: " . $e->getMessage());
+            return null;
         }
     }
 }
