@@ -63,11 +63,11 @@ class DeepSeekController extends Controller
             $pdf = $parser->parseFile($filePath);
             $text = $pdf->getText();
 
-            // Limitar el texto para evitar exceso de tokens (ejemplo: máximo 30000 caracteres)
-            $maxLength = 30000;
-            if (strlen($text) > $maxLength) {
-                $text = substr($text, 0, $maxLength) . "\n\n[Texto truncado para cumplir con límite de tokens]";
-            }
+            // // Limitar el texto para evitar exceso de tokens (ejemplo: máximo 30000 caracteres)
+            // $maxLength = 30000;
+            // if (strlen($text) > $maxLength) {
+            //     $text = substr($text, 0, $maxLength) . "\n\n[Texto truncado para cumplir con límite de tokens]";
+            // }
 
             // Eliminar archivo temporal después de extraer texto
             Storage::disk('local')->delete($tempFileName);
@@ -78,11 +78,14 @@ class DeepSeekController extends Controller
             . "Texto del documento:\n" . $text . "\n\n"
             . "Pregunta: " . $request->question . "\n\n"
             . "Instrucciones:\n"
+            . "- Responde ÚNICAMENTE basado en el texto proporcionado\n"
+            . "- Responde siempre en español\n"
             . "- Sé preciso y conciso\n"
             . "- No inventes información\n"
             . "- Responde solo con información del texto proporcionado\n"
+            . "- Responde utilizando la información exacta del documento proporcionado\n"
             . "- Cita secciones relevantes si es posible\n"
-            . "- No utilices formato Markdown, ni HTML, ni símbolos como asteriscos, guiones dobles, comillas dobles o triples\n"
+            // . "- No utilices formato Markdown, ni HTML, ni símbolos como asteriscos, guiones dobles, comillas dobles o triples\n"
             . "- Da la respuesta como texto plano, sin ningún tipo de formato";
 
             $payload = [
