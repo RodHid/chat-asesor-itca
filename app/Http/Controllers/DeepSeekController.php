@@ -24,10 +24,10 @@ class DeepSeekController extends Controller
         ]);
 
         try {
-            // Generate or use provided session ID
+            // Generar o usar el ID de sesión proporcionado
             $sessionId = $request->session_id ?: 'session_' . Str::random(10);
             
-            // Get or create document context
+            // Obtener o crear contexto del documento
             $documentContext = $this->getOrCreateDocumentContext($sessionId);
             
             if (!$documentContext) {
@@ -47,16 +47,16 @@ class DeepSeekController extends Controller
                 ], 500);
             }
 
-            // Track start time for response measurement
+            // Registrar tiempo de inicio para medir respuesta
             $startTime = microtime(true);
 
-            // Send question with pre-loaded context
+            // Enviar pregunta con contexto pre-cargado
             $response = $this->askQuestionWithContext($documentContext, $request->question, $sessionId);
 
-            // Calculate response time
-            $responseTime = (microtime(true) - $startTime) * 1000; // Convert to milliseconds
+            // Calcular tiempo de respuesta
+            $responseTime = (microtime(true) - $startTime) * 1000; // Convertir a milisegundos
 
-            // Optionally log the interaction to database
+            // Opcionalmente registrar la interacción en la base de datos
             $this->logChatInteraction($sessionId, $request->question, $response, $responseTime, $documentContext);
 
             return response()->json([
@@ -72,7 +72,7 @@ class DeepSeekController extends Controller
                 'trace' => $e->getTraceAsString()
             ]);
 
-            // Create detailed error message for chat response
+            // Crear mensaje de error detallado para respuesta del chat
             $errorDetails = [
                 'error_type' => get_class($e),
                 'message' => $e->getMessage(),
@@ -82,7 +82,7 @@ class DeepSeekController extends Controller
                 'timestamp' => now()->toISOString()
             ];
 
-            // Format error for chat display
+            // Formatear error para mostrar en el chat
             $chatErrorMessage = "❌ **Error del Sistema**\n\n";
             $chatErrorMessage .= "**Tipo:** " . $errorDetails['error_type'] . "\n";
             $chatErrorMessage .= "**Mensaje:** " . $errorDetails['message'] . "\n";
@@ -107,7 +107,7 @@ class DeepSeekController extends Controller
     {
         $cacheKey = "document_context_{$sessionId}";
         
-        // Force use of file cache to avoid database issues
+        // Forzar uso de cache de archivos para evitar problemas de base de datos
         try {
             $context = Cache::store('file')->get($cacheKey);
             if ($context) {
@@ -116,30 +116,30 @@ class DeepSeekController extends Controller
             }
         } catch (\Exception $e) {
             \Log::warning("Error accediendo al cache: " . $e->getMessage());
-            // Continue with document processing if cache fails
+            // Continuar con el procesamiento del documento si falla el cache
         }
 
-        // Process document for the first time
+        // Procesar documento por primera vez
         \Log::info("Procesando documento por primera vez para sesión: {$sessionId}");
         
         try {
             $pdfUrl = self::INFO_CHAT_DOCUMENT;
             
-            // Download PDF
+            // Descargar PDF
             $response = Http::timeout(30)->get($pdfUrl);
             if (!$response->successful()) {
                 \Log::error("Error descargando PDF: " . $response->status());
                 return null;
             }
 
-            // Verify content type
+            // Verificar tipo de contenido
             $contentType = $response->header('Content-Type');
             if (strpos($contentType, 'pdf') === false) {
                 \Log::error("Contenido no es PDF válido");
                 return null;
             }
 
-            // Save and parse PDF
+            // Guardar y analizar PDF
             $tempFileName = 'temp_' . Str::random(10) . '.pdf';
             Storage::disk('local')->put($tempFileName, $response->body());
             $filePath = Storage::disk('local')->path($tempFileName);
@@ -148,10 +148,10 @@ class DeepSeekController extends Controller
             $pdf = $parser->parseFile($filePath);
             $text = $pdf->getText();
 
-            // Clean up temporary file
+            // Limpiar archivo temporal
             Storage::disk('local')->delete($tempFileName);
 
-            // Create context with pre-loaded instructions
+            // Crear contexto con instrucciones pre-cargadas
             $context = [
                 'document_text' => $text,
                 'document_url' => $pdfUrl,
@@ -159,13 +159,13 @@ class DeepSeekController extends Controller
                 'total_length' => strlen($text)
             ];
 
-            // Cache context for 2 hours using file cache explicitly
+            // Cachear contexto por 2 horas usando cache de archivos explícitamente
             try {
                 Cache::store('file')->put($cacheKey, $context, now()->addHours(2));
                 \Log::info("Contexto creado y cacheado para sesión: {$sessionId}");
             } catch (\Exception $e) {
                 \Log::warning("Error guardando en cache: " . $e->getMessage());
-                // Continue without caching if there's an issue
+                // Continuar sin cache si hay algún problema
             }
             
             return $context;
@@ -188,7 +188,7 @@ class DeepSeekController extends Controller
     private function askQuestionWithContext($context, $question, $sessionId)
     {
         try {
-            // Find relevant sections of the document based on the question
+            // Encontrar secciones relevantes del documento basado en la pregunta
             $relevantContent = $this->findRelevantContent($context['document_text'], $question);
             
             $systemMessage = "Eres un experto asistente educativo especializado en ITCA-FEPADE. "
@@ -225,10 +225,10 @@ class DeepSeekController extends Controller
                     ]
                 ],
                 'temperature' => 0.3,
-                'max_tokens' => 1000  // Reduced to prevent timeouts
+                'max_tokens' => 1000  // Reducido para prevenir timeouts
             ];
 
-            // Send to DeepSeek API with shorter timeout for faster failure detection
+            // Enviar a la API de DeepSeek con timeout más corto para detección rápida de fallos
             $deepseekResponse = Http::withHeaders([
                 'Authorization' => 'Bearer ' . env('DEEPSEEK_API_KEY'),
                 'Content-Type' => 'application/json',
@@ -246,12 +246,12 @@ class DeepSeekController extends Controller
 
             \Log::warning("Error en respuesta de DeepSeek para sesión {$sessionId}: " . $deepseekResponse->body());
             
-            // Create detailed API error message
+            // Crear mensaje de error detallado de la API
             $apiError = "❌ **Error de API de DeepSeek**\n\n";
             $apiError .= "**Status Code:** " . $deepseekResponse->status() . "\n";
             $apiError .= "**Sesión:** " . $sessionId . "\n\n";
             
-            // Try to parse error details
+            // Intentar analizar detalles del error
             $errorData = $deepseekResponse->json();
             if (isset($errorData['error'])) {
                 $apiError .= "**Detalle del Error:**\n";
@@ -454,18 +454,18 @@ class DeepSeekController extends Controller
     }
 
     /**
-     * Log chat interaction to database (optional)
+     * Registrar interacción del chat en la base de datos (opcional)
      */
     private function logChatInteraction(string $sessionId, string $question, string $response, float $responseTimeMs, array $documentContext = null)
     {
         try {
-            // Only log if database is properly configured
+            // Solo registrar si la base de datos está configurada correctamente
             if (config('database.default') === 'pgsql' && !empty(config('database.connections.pgsql.database'))) {
                 
-                // Find or create chat session
+                // Encontrar o crear sesión de chat
                 $chatSession = ChatSession::findOrCreateBySessionId($sessionId);
                 
-                // Update session info if we have document context
+                // Actualizar información de sesión si tenemos contexto del documento
                 if ($documentContext && !$chatSession->document_processed_at) {
                     $chatSession->update([
                         'document_url' => $documentContext['document_url'] ?? null,
@@ -474,10 +474,10 @@ class DeepSeekController extends Controller
                     ]);
                 }
 
-                // Increment question count
+                // Incrementar contador de preguntas
                 $chatSession->incrementQuestions();
 
-                // Log the interaction
+                // Registrar la interacción
                 ChatInteraction::logInteraction(
                     $sessionId,
                     $question,
@@ -493,21 +493,21 @@ class DeepSeekController extends Controller
                 \Log::info("Chat interaction logged for session: {$sessionId}");
             }
         } catch (\Exception $e) {
-            // Don't let logging errors break the main functionality
+            // No permitir que errores de logging rompan la funcionalidad principal
             \Log::warning("Failed to log chat interaction: " . $e->getMessage());
         }
     }
 
     /**
-     * Find relevant content from the document based on the question
+     * Encontrar contenido relevante del documento basado en la pregunta
      */
     private function findRelevantContent($documentText, $question, $maxLength = 30000)
     {
         try {
-            // Convert question to lowercase for better matching
+            // Convertir pregunta a minúsculas para mejor coincidencia
             $questionLower = strtolower($question);
             
-            // Extract keywords from the question (remove common words)
+            // Extraer palabras clave de la pregunta (remover palabras comunes)
             $commonWords = ['que', 'como', 'donde', 'cuando', 'cual', 'quien', 'por', 'para', 'con', 'sin', 'sobre', 'de', 'la', 'el', 'los', 'las', 'un', 'una', 'y', 'o', 'pero', 'si', 'no', 'es', 'son', 'esta', 'esto', 'esa', 'ese'];
             $questionWords = array_filter(
                 explode(' ', $questionLower),
@@ -517,24 +517,24 @@ class DeepSeekController extends Controller
             );
 
             if (empty($questionWords)) {
-                // If no keywords found, return first part of document
+                // Si no se encuentran palabras clave, devolver primera parte del documento
                 return strlen($documentText) > $maxLength 
                     ? substr($documentText, 0, $maxLength) . "\n\n[CONTENIDO PARCIAL - PREGUNTA GENERAL]"
                     : $documentText;
             }
 
-            // Split document into paragraphs
+            // Dividir documento en párrafos
             $paragraphs = array_filter(explode("\n\n", $documentText));
             $scoredParagraphs = [];
 
-            // Score each paragraph based on keyword matches
+            // Puntuar cada párrafo basado en coincidencias de palabras clave
             foreach ($paragraphs as $index => $paragraph) {
                 $paragraphLower = strtolower($paragraph);
                 $score = 0;
                 
                 foreach ($questionWords as $word) {
                     $score += substr_count($paragraphLower, $word) * 10;
-                    // Bonus for exact matches
+                    // Bonus por coincidencias exactas
                     if (strpos($paragraphLower, $word) !== false) {
                         $score += 5;
                     }
@@ -549,12 +549,12 @@ class DeepSeekController extends Controller
                 }
             }
 
-            // Sort by score (highest first)
+            // Ordenar por puntuación (mayor primero)
             usort($scoredParagraphs, function($a, $b) {
                 return $b['score'] - $a['score'];
             });
 
-            // Combine top-scoring paragraphs until we reach max length
+            // Combinar párrafos con mayor puntuación hasta alcanzar longitud máxima
             $relevantContent = '';
             $currentLength = 0;
 
@@ -566,17 +566,17 @@ class DeepSeekController extends Controller
                 }
                 
                 $relevantContent .= $paragraph['content'] . "\n\n";
-                $currentLength += $paragraphLength + 2; // +2 for the newlines
+                $currentLength += $paragraphLength + 2; // +2 por los saltos de línea
             }
 
-            // If we didn't find enough relevant content, add some from the beginning
+            // Si no encontramos suficiente contenido relevante, agregar algo del principio
             if ($currentLength < $maxLength / 2) {
                 $remainingLength = $maxLength - $currentLength;
                 $additionalContent = substr($documentText, 0, $remainingLength);
                 $relevantContent = $additionalContent . "\n\n--- CONTENIDO ESPECÍFICO ---\n\n" . $relevantContent;
             }
 
-            // Add metadata about the search
+            // Agregar metadatos sobre la búsqueda
             $relevantContent .= "\n\n[BÚSQUEDA REALIZADA CON PALABRAS CLAVE: " . implode(', ', $questionWords) . "]";
             $relevantContent .= "\n[SECCIONES RELEVANTES ENCONTRADAS: " . count($scoredParagraphs) . "]";
 
@@ -584,7 +584,7 @@ class DeepSeekController extends Controller
 
         } catch (\Exception $e) {
             \Log::warning("Error finding relevant content: " . $e->getMessage());
-            // Fallback to truncated full content
+            // Respaldo a contenido completo truncado
             return strlen($documentText) > $maxLength 
                 ? substr($documentText, 0, $maxLength) . "\n\n[CONTENIDO PARCIAL - ERROR EN BÚSQUEDA]"
                 : $documentText;
