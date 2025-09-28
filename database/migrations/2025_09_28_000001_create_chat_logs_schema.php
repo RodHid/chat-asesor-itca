@@ -18,8 +18,8 @@ return new class extends Migration
         // Set the search path to use the new schema
         DB::statement('SET search_path TO "chat-logs", public');
         
-        // Create cache table in the chat-logs schema (if using database cache)
-        if (!Schema::hasTable('cache')) {
+        // Create cache table in the chat-logs schema (only if using database cache)
+        if (config('cache.default') === 'database' && !Schema::hasTable('cache')) {
             Schema::create('cache', function (Blueprint $table) {
                 $table->string('key')->primary();
                 $table->mediumText('value');
@@ -27,8 +27,8 @@ return new class extends Migration
             });
         }
 
-        // Create cache_locks table (for database cache locking)
-        if (!Schema::hasTable('cache_locks')) {
+        // Create cache_locks table (only if using database cache)
+        if (config('cache.default') === 'database' && !Schema::hasTable('cache_locks')) {
             Schema::create('cache_locks', function (Blueprint $table) {
                 $table->string('key')->primary();
                 $table->string('owner');

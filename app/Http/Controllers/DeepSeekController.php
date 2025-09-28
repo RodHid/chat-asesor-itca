@@ -107,11 +107,16 @@ class DeepSeekController extends Controller
     {
         $cacheKey = "document_context_{$sessionId}";
         
-        // Check if context already exists
-        $context = Cache::get($cacheKey);
-        if ($context) {
-            \Log::info("Contexto encontrado en cache para sesión: {$sessionId}");
-            return $context;
+        // Force use of file cache to avoid database issues
+        try {
+            $context = Cache::store('file')->get($cacheKey);
+            if ($context) {
+                \Log::info("Contexto encontrado en cache para sesión: {$sessionId}");
+                return $context;
+            }
+        } catch (\Exception $e) {
+            \Log::warning("Error accediendo al cache: " . $e->getMessage());
+            // Continue with document processing if cache fails
         }
 
         // Process document for the first time
@@ -154,10 +159,15 @@ class DeepSeekController extends Controller
                 'total_length' => strlen($text)
             ];
 
-            // Cache context for 2 hours
-            Cache::put($cacheKey, $context, now()->addHours(2));
+            // Cache context for 2 hours using file cache explicitly
+            try {
+                Cache::store('file')->put($cacheKey, $context, now()->addHours(2));
+                \Log::info("Contexto creado y cacheado para sesión: {$sessionId}");
+            } catch (\Exception $e) {
+                \Log::warning("Error guardando en cache: " . $e->getMessage());
+                // Continue without caching if there's an issue
+            }
             
-            \Log::info("Contexto creado y cacheado para sesión: {$sessionId}");
             return $context;
 
         } catch (\Exception $e) {
@@ -369,10 +379,17 @@ class DeepSeekController extends Controller
         ]);
 
         $cacheKey = "document_context_{$request->session_id}";
-        Cache::forget($cacheKey);
+        
+        try {
+            Cache::store('file')->forget($cacheKey);
+            $message = 'Sesión limpiada exitosamente';
+        } catch (\Exception $e) {
+            \Log::warning("Error limpiando cache: " . $e->getMessage());
+            $message = 'Sesión limpiada (cache no disponible)';
+        }
 
         return response()->json([
-            'message' => 'Sesión limpiada exitosamente',
+            'message' => $message,
             'session_id' => $request->session_id
         ]);
     }
