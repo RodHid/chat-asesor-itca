@@ -29,8 +29,19 @@ class DeepSeekController extends Controller
             $documentContext = $this->getOrCreateDocumentContext($sessionId);
             
             if (!$documentContext) {
+                $errorMessage = "❌ **Error de Documento**\n\n";
+                $errorMessage .= "No se pudo descargar o procesar el documento de ITCA-FEPADE.\n\n";
+                $errorMessage .= "**Posibles causas:**\n";
+                $errorMessage .= "- Problema de conectividad con el servidor de documentos\n";
+                $errorMessage .= "- El documento PDF no está disponible temporalmente\n";
+                $errorMessage .= "- Error en el procesamiento del contenido\n\n";
+                $errorMessage .= "**Solución:** Intenta nuevamente en unos minutos o contacta al soporte técnico.\n\n";
+                $errorMessage .= "**URL del documento:** " . self::INFO_CHAT_DOCUMENT;
+
                 return response()->json([
-                    'error' => 'No se pudo procesar el documento predefinido'
+                    'error' => 'No se pudo procesar el documento predefinido',
+                    'response' => $errorMessage,
+                    'session_id' => $sessionId
                 ], 500);
             }
 
@@ -49,9 +60,30 @@ class DeepSeekController extends Controller
                 'trace' => $e->getTraceAsString()
             ]);
 
+            // Create detailed error message for chat response
+            $errorDetails = [
+                'error_type' => get_class($e),
+                'message' => $e->getMessage(),
+                'file' => basename($e->getFile()),
+                'line' => $e->getLine(),
+                'session_id' => $request->session_id ?? 'no-session',
+                'timestamp' => now()->toISOString()
+            ];
+
+            // Format error for chat display
+            $chatErrorMessage = "❌ **Error del Sistema**\n\n";
+            $chatErrorMessage .= "**Tipo:** " . $errorDetails['error_type'] . "\n";
+            $chatErrorMessage .= "**Mensaje:** " . $errorDetails['message'] . "\n";
+            $chatErrorMessage .= "**Archivo:** " . $errorDetails['file'] . " (línea " . $errorDetails['line'] . ")\n";
+            $chatErrorMessage .= "**Sesión ID:** " . $errorDetails['session_id'] . "\n";
+            $chatErrorMessage .= "**Hora:** " . $errorDetails['timestamp'] . "\n\n";
+            $chatErrorMessage .= "*Por favor, reporta este error al equipo de desarrollo.*";
+
             return response()->json([
-                'error' => 'Error interno',
-                'exception_message' => $e->getMessage()
+                'error' => 'Error interno del sistema',
+                'response' => $chatErrorMessage,
+                'debug_info' => $errorDetails,
+                'session_id' => $request->session_id ?? null
             ], 500);
         }
     }
@@ -117,7 +149,13 @@ class DeepSeekController extends Controller
             return $context;
 
         } catch (\Exception $e) {
-            \Log::error("Error procesando documento: " . $e->getMessage());
+            \Log::error("Error procesando documento: " . $e->getMessage(), [
+                'session_id' => $sessionId,
+                'pdf_url' => $pdfUrl,
+                'error_type' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
             return null;
         }
     }
@@ -183,11 +221,44 @@ class DeepSeekController extends Controller
             }
 
             \Log::warning("Error en respuesta de DeepSeek para sesión {$sessionId}: " . $deepseekResponse->body());
-            return 'Por el momento no puedo responder esa pregunta, para más información visita el sitio web de ITCA-FEPADE o visita ' . self::INFO_CHAT_DOCUMENT;
+            
+            // Create detailed API error message
+            $apiError = "❌ **Error de API de DeepSeek**\n\n";
+            $apiError .= "**Status Code:** " . $deepseekResponse->status() . "\n";
+            $apiError .= "**Sesión:** " . $sessionId . "\n\n";
+            
+            // Try to parse error details
+            $errorData = $deepseekResponse->json();
+            if (isset($errorData['error'])) {
+                $apiError .= "**Detalle del Error:**\n";
+                $apiError .= "- **Tipo:** " . ($errorData['error']['type'] ?? 'No especificado') . "\n";
+                $apiError .= "- **Mensaje:** " . ($errorData['error']['message'] ?? 'No especificado') . "\n";
+                if (isset($errorData['error']['code'])) {
+                    $apiError .= "- **Código:** " . $errorData['error']['code'] . "\n";
+                }
+            } else {
+                $apiError .= "**Respuesta del servidor:** " . substr($deepseekResponse->body(), 0, 200) . "...\n";
+            }
+            
+            $apiError .= "\n*Por favor, intenta nuevamente. Si el problema persiste, contacta al soporte técnico.*";
+            
+            return $apiError;
 
         } catch (\Exception $e) {
             \Log::error("Error enviando pregunta para sesión {$sessionId}: " . $e->getMessage());
-            return 'Error procesando la consulta. Por favor, intenta nuevamente.';
+            
+            $contextError = "❌ **Error de Contexto**\n\n";
+            $contextError .= "**Tipo:** " . get_class($e) . "\n";
+            $contextError .= "**Mensaje:** " . $e->getMessage() . "\n";
+            $contextError .= "**Sesión:** " . $sessionId . "\n";
+            $contextError .= "**Archivo:** " . basename($e->getFile()) . " (línea " . $e->getLine() . ")\n\n";
+            $contextError .= "**Posibles causas:**\n";
+            $contextError .= "- Timeout en la conexión con la API\n";
+            $contextError .= "- Problema con el contexto del documento\n";
+            $contextError .= "- Error en el formato de la solicitud\n\n";
+            $contextError .= "*Intenta hacer una nueva pregunta o reinicia la conversación.*";
+            
+            return $contextError;
         }
     }
 
@@ -291,6 +362,63 @@ class DeepSeekController extends Controller
         return response()->json([
             'message' => 'Sesión limpiada exitosamente',
             'session_id' => $request->session_id
+        ]);
+    }
+
+    /**
+     * Genera un mensaje de error formateado para mostrar en el chat
+     */
+    private function formatErrorForChat($title, $details = [])
+    {
+        $errorMessage = "❌ **{$title}**\n\n";
+        
+        foreach ($details as $key => $value) {
+            $errorMessage .= "**" . ucfirst(str_replace('_', ' ', $key)) . ":** {$value}\n";
+        }
+        
+        $errorMessage .= "\n*Si el problema persiste, contacta al equipo de soporte técnico.*";
+        
+        return $errorMessage;
+    }
+
+    /**
+     * Endpoint para obtener información de debug (solo en desarrollo)
+     */
+    public function getDebugInfo(Request $request)
+    {
+        if (!app()->environment('local', 'development')) {
+            return response()->json(['error' => 'Endpoint no disponible en producción'], 403);
+        }
+
+        $request->validate([
+            'session_id' => 'nullable|string|max:100'
+        ]);
+
+        $sessionId = $request->session_id;
+        $debugInfo = [
+            'environment' => app()->environment(),
+            'php_version' => PHP_VERSION,
+            'laravel_version' => app()->version(),
+            'cache_driver' => config('cache.default'),
+            'deepseek_api_configured' => !empty(env('DEEPSEEK_API_KEY')),
+            'document_url' => self::INFO_CHAT_DOCUMENT,
+            'timestamp' => now()->toISOString()
+        ];
+
+        if ($sessionId) {
+            $cacheKey = "document_context_{$sessionId}";
+            $context = Cache::get($cacheKey);
+            $debugInfo['session_info'] = [
+                'session_id' => $sessionId,
+                'context_exists' => !is_null($context),
+                'context_size' => $context ? strlen($context['document_text']) : 0,
+                'cached_at' => $context['processed_at'] ?? null
+            ];
+        }
+
+        return response()->json([
+            'debug_info' => $debugInfo,
+            'formatted_message' => $this->formatErrorForChat('Debug Information', $debugInfo)
         ]);
     }
 }

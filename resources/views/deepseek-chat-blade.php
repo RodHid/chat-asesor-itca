@@ -538,14 +538,24 @@
                 // Ocultar indicador de escritura
                 typingIndicator.style.display = 'none';
                 
+                let errorMessage = '';
+                
+                // Check if server returned a detailed error response
+                if (error.response?.data?.response) {
+                    // Use the formatted error message from server
+                    errorMessage = formatResponseText(error.response.data.response);
+                } else {
+                    // Fallback to basic error message
+                    const basicError = error.response?.data?.error || 'Error al procesar la solicitud';
+                    errorMessage = `<p class="text-danger mb-0">❌ <strong>Error:</strong> ${basicError}</p>`;
+                }
+                
                 // Mostrar mensaje de error
                 const errorMessageHtml = `
                     <div class="message bot-message">
                         <div class="message-content">
                             <strong><i class="bi bi-robot"></i> Asistente:</strong>
-                            <div class="bot-response mt-2">
-                                <p class="text-danger mb-0">❌ <strong>Error:</strong> ${error.response?.data?.error || 'Error al procesar la solicitud'}</p>
-                            </div>
+                            <div class="bot-response mt-2">${safeRenderHTML(errorMessage)}</div>
                         </div>
                         <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                     </div>
@@ -553,6 +563,11 @@
                 
                 chatMessages.insertAdjacentHTML('beforeend', errorMessageHtml);
                 chatMessages.scrollTop = chatMessages.scrollHeight;
+                
+                // Log debug info to console if available
+                if (error.response?.data?.debug_info) {
+                    console.error('Debug Info:', error.response.data.debug_info);
+                }
                 
                 // Restaurar botón
                 submitBtn.disabled = false;
