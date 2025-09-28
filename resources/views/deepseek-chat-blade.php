@@ -172,6 +172,107 @@
             font-size: 1.5rem;
             color: var(--primary-color);
         }
+        
+        .context-badge {
+            font-size: 0.7rem !important;
+            padding: 2px 6px !important;
+        }
+        
+        /* Rich text formatting styles */
+        .bot-response {
+            line-height: 1.6;
+        }
+        
+        .bot-response h1,
+        .bot-response h2,
+        .bot-response h3,
+        .bot-response h4,
+        .bot-response h5,
+        .bot-response h6 {
+            margin: 15px 0 10px 0;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .bot-response h1 { font-size: 1.4rem; }
+        .bot-response h2 { font-size: 1.3rem; }
+        .bot-response h3 { font-size: 1.2rem; }
+        .bot-response h4 { font-size: 1.1rem; }
+        .bot-response h5 { font-size: 1.05rem; }
+        .bot-response h6 { font-size: 1rem; }
+        
+        .bot-response p {
+            margin: 8px 0;
+        }
+        
+        .bot-response ul,
+        .bot-response ol {
+            margin: 10px 0;
+            padding-left: 25px;
+        }
+        
+        .bot-response li {
+            margin: 5px 0;
+        }
+        
+        .bot-response strong,
+        .bot-response b {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .bot-response em,
+        .bot-response i {
+            font-style: italic;
+            color: #555;
+        }
+        
+        .bot-response code {
+            background-color: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #d63384;
+        }
+        
+        .bot-response pre {
+            background-color: #f8f9fa;
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 10px 0;
+            border-left: 4px solid #0d6efd;
+        }
+        
+        .bot-response blockquote {
+            border-left: 4px solid #0d6efd;
+            padding-left: 15px;
+            margin: 15px 0;
+            color: #6c757d;
+            font-style: italic;
+        }
+        
+        .bot-response hr {
+            border: none;
+            border-top: 1px solid #dee2e6;
+            margin: 20px 0;
+        }
+        
+        .bot-response a {
+            color: #0d6efd;
+            text-decoration: underline;
+        }
+        
+        .bot-response a:hover {
+            color: #0a58ca;
+        }
+        
+        .bot-response .highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
     </style>
 </head>
 <body>
@@ -213,7 +314,18 @@
                         <div class="message bot-message">
                             <div class="message-content">
                                 <strong><i class="bi bi-robot"></i> Asistente:</strong>
-                                <p class="mb-0">¡Hola! Estoy listo para responder tus preguntas sobre ITCA-FEPADE.</p>
+                                <div class="bot-response mt-2">
+                                    <p class="mb-2">¡Hola! 👋 Soy tu <strong>Asesor Vocacional de ITCA-FEPADE</strong>.</p>
+                                    <p class="mb-2">Estoy aquí para ayudarte con información sobre:</p>
+                                    <ul class="mb-2">
+                                        <li><strong>Programas académicos</strong> y carreras disponibles</li>
+                                        <li><strong>Requisitos de admisión</strong> y procesos de inscripción</li>
+                                        <li><strong>Becas y ayudas financieras</strong></li>
+                                        <li><strong>Servicios estudiantiles</strong> y campus</li>
+                                        <li><strong>Cualquier otra consulta</strong> sobre ITCA-FEPADE</li>
+                                    </ul>
+                                    <p class="mb-0"><em>¿En qué puedo ayudarte hoy?</em> 🎓</p>
+                                </div>
                             </div>
                             <div class="message-time">Ahora</div>
                         </div>
@@ -252,14 +364,86 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Axios -->
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <!-- Marked.js for Markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     
     <script>
         // URL del documento predefinida
         const DOCUMENT_URL = "{{ env('INFO_CHAT_DOCUMENT', 'https://www.itca.edu.sv/wp-content/uploads/2024/10/GuiaEstudiantil2025_compressed.pdf')}}";
         const DOCUMENT_NAME = DOCUMENT_URL.split('/').pop() || 'GuiaEstudiantil2025_compressed.pdf';
         
+        // Session management
+        let sessionId = localStorage.getItem('chat_session_id') || null;
+        
         // Mostrar nombre del documento en la interfaz
         document.getElementById('documentUrl').textContent = DOCUMENT_NAME;
+        
+        // Configure marked.js for better markdown rendering
+        if (typeof marked !== 'undefined') {
+            marked.setOptions({
+                breaks: true,
+                gfm: true,
+                sanitize: false,
+                smartLists: true,
+                smartypants: true
+            });
+        }
+        
+        // Function to format AI response text
+        function formatResponseText(text) {
+            if (!text) return '';
+            
+            // First, handle basic markdown if marked.js is available
+            if (typeof marked !== 'undefined') {
+                try {
+                    return marked.parse(text);
+                } catch (e) {
+                    console.warn('Markdown parsing failed, falling back to basic formatting:', e);
+                }
+            }
+            
+            // Fallback: Basic text formatting
+            return formatBasicText(text);
+        }
+        
+        // Basic text formatting without markdown library
+        function formatBasicText(text) {
+            return text
+                // Convert line breaks to HTML
+                .replace(/\n\n/g, '</p><p>')
+                .replace(/\n/g, '<br>')
+                // Bold text **text** or __text__
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/__(.*?)__/g, '<strong>$1</strong>')
+                // Italic text *text* or _text_
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/_(.*?)_/g, '<em>$1</em>')
+                // Code blocks `code`
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                // Wrap in paragraph tags
+                .replace(/^(.+)$/gm, '<p>$1</p>')
+                // Clean up multiple paragraph tags
+                .replace(/<\/p>\s*<p>/g, '</p><p>')
+                // Handle bullet points
+                .replace(/^\s*[-*+]\s+(.+)$/gm, '<li>$1</li>')
+                .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+                // Handle numbered lists
+                .replace(/^\s*\d+\.\s+(.+)$/gm, '<li>$1</li>')
+                .replace(/(<li>.*<\/li>)/s, '<ol>$1</ol>');
+        }
+        
+        // Function to safely render HTML content
+        function safeRenderHTML(htmlContent) {
+            // Create a temporary div to sanitize content
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = htmlContent;
+            
+            // Remove any potentially dangerous elements/attributes
+            const scripts = tempDiv.querySelectorAll('script');
+            scripts.forEach(script => script.remove());
+            
+            return tempDiv.innerHTML;
+        }
         
         // Configurar textarea para permitir nueva línea con Shift+Enter
         const textarea = document.getElementById('question');
@@ -290,7 +474,7 @@
                 <div class="message user-message">
                     <div class="message-content">
                         <strong><i class="bi bi-person"></i> Tú:</strong>
-                        <p class="mb-0">${question}</p>
+                        <div class="mt-2">${question.replace(/\n/g, '<br>')}</div>
                     </div>
                     <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                 </div>
@@ -309,18 +493,35 @@
             
             // Enviar solicitud al servidor
             axios.post('/process-fixed-document', {
-                question: question
+                question: question,
+                session_id: sessionId
             })
             .then(response => {
                 // Ocultar indicador de escritura
                 typingIndicator.style.display = 'none';
                 
+                // Update session ID if provided
+                if (response.data.session_id) {
+                    sessionId = response.data.session_id;
+                    localStorage.setItem('chat_session_id', sessionId);
+                }
+                
+                // Show context status if first time
+                let contextBadge = '';
+                if (response.data.context_loaded && !document.querySelector('.context-badge')) {
+                    contextBadge = '<small class="context-badge badge bg-success ms-2">Documento cargado</small>';
+                }
+                
+                // Format the AI response with rich text
+                const formattedResponse = formatResponseText(response.data.response);
+                const safeResponse = safeRenderHTML(formattedResponse);
+                
                 // Mostrar respuesta del asistente
                 const botMessageHtml = `
                     <div class="message bot-message">
                         <div class="message-content">
-                            <strong><i class="bi bi-robot"></i> Asistente:</strong>
-                            <p class="mb-0">${response.data.response}</p>
+                            <strong><i class="bi bi-robot"></i> Asistente:</strong>${contextBadge}
+                            <div class="bot-response mt-2">${safeResponse}</div>
                         </div>
                         <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                     </div>
@@ -342,7 +543,9 @@
                     <div class="message bot-message">
                         <div class="message-content">
                             <strong><i class="bi bi-robot"></i> Asistente:</strong>
-                            <p class="mb-0 text-danger">❌ Error: ${error.response?.data?.error || 'Error al procesar la solicitud'}</p>
+                            <div class="bot-response mt-2">
+                                <p class="text-danger mb-0">❌ <strong>Error:</strong> ${error.response?.data?.error || 'Error al procesar la solicitud'}</p>
+                            </div>
                         </div>
                         <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                     </div>
