@@ -188,11 +188,13 @@ class DeepSeekController extends Controller
     private function askQuestionWithContext($context, $question, $sessionId)
     {
         try {
-            // Prepare the system message with full document context and instructions
+            // Find relevant sections of the document based on the question
+            $relevantContent = $this->findRelevantContent($context['document_text'], $question);
+            
             $systemMessage = "Eres un experto asistente educativo especializado en ITCA-FEPADE. "
-                . "Tienes acceso completo al siguiente documento oficial de la institución:\n\n"
+                . "Tienes acceso al siguiente contenido relevante del documento oficial de la institución:\n\n"
                 . "DOCUMENTO: Guía Estudiantil ITCA-FEPADE 2025\n"
-                . "CONTENIDO DEL DOCUMENTO:\n" . $context['document_text'] . "\n\n"
+                . "CONTENIDO RELEVANTE:\n" . $relevantContent . "\n\n"
                 . "INSTRUCCIONES IMPORTANTES:\n"
                 . "- Responde ÚNICAMENTE basado en la información del documento proporcionado\n"
                 . "- Responde siempre en español\n"
@@ -223,14 +225,14 @@ class DeepSeekController extends Controller
                     ]
                 ],
                 'temperature' => 0.3,
-                'max_tokens' => 1500
+                'max_tokens' => 1000  // Reduced to prevent timeouts
             ];
 
-            // Send to DeepSeek API
+            // Send to DeepSeek API with shorter timeout for faster failure detection
             $deepseekResponse = Http::withHeaders([
                 'Authorization' => 'Bearer ' . env('DEEPSEEK_API_KEY'),
                 'Content-Type' => 'application/json',
-            ])->timeout(90)->post('https://api.deepseek.com/v1/chat/completions', $payload);
+            ])->timeout(60)->post('https://api.deepseek.com/v1/chat/completions', $payload);
 
             if ($deepseekResponse->successful()) {
                 $responseData = $deepseekResponse->json();
@@ -493,6 +495,99 @@ class DeepSeekController extends Controller
         } catch (\Exception $e) {
             // Don't let logging errors break the main functionality
             \Log::warning("Failed to log chat interaction: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Find relevant content from the document based on the question
+     */
+    private function findRelevantContent($documentText, $question, $maxLength = 30000)
+    {
+        try {
+            // Convert question to lowercase for better matching
+            $questionLower = strtolower($question);
+            
+            // Extract keywords from the question (remove common words)
+            $commonWords = ['que', 'como', 'donde', 'cuando', 'cual', 'quien', 'por', 'para', 'con', 'sin', 'sobre', 'de', 'la', 'el', 'los', 'las', 'un', 'una', 'y', 'o', 'pero', 'si', 'no', 'es', 'son', 'esta', 'esto', 'esa', 'ese'];
+            $questionWords = array_filter(
+                explode(' ', $questionLower),
+                function($word) use ($commonWords) {
+                    return strlen($word) > 2 && !in_array($word, $commonWords);
+                }
+            );
+
+            if (empty($questionWords)) {
+                // If no keywords found, return first part of document
+                return strlen($documentText) > $maxLength 
+                    ? substr($documentText, 0, $maxLength) . "\n\n[CONTENIDO PARCIAL - PREGUNTA GENERAL]"
+                    : $documentText;
+            }
+
+            // Split document into paragraphs
+            $paragraphs = array_filter(explode("\n\n", $documentText));
+            $scoredParagraphs = [];
+
+            // Score each paragraph based on keyword matches
+            foreach ($paragraphs as $index => $paragraph) {
+                $paragraphLower = strtolower($paragraph);
+                $score = 0;
+                
+                foreach ($questionWords as $word) {
+                    $score += substr_count($paragraphLower, $word) * 10;
+                    // Bonus for exact matches
+                    if (strpos($paragraphLower, $word) !== false) {
+                        $score += 5;
+                    }
+                }
+
+                if ($score > 0) {
+                    $scoredParagraphs[] = [
+                        'content' => $paragraph,
+                        'score' => $score,
+                        'index' => $index
+                    ];
+                }
+            }
+
+            // Sort by score (highest first)
+            usort($scoredParagraphs, function($a, $b) {
+                return $b['score'] - $a['score'];
+            });
+
+            // Combine top-scoring paragraphs until we reach max length
+            $relevantContent = '';
+            $currentLength = 0;
+
+            foreach ($scoredParagraphs as $paragraph) {
+                $paragraphLength = strlen($paragraph['content']);
+                
+                if ($currentLength + $paragraphLength > $maxLength) {
+                    break;
+                }
+                
+                $relevantContent .= $paragraph['content'] . "\n\n";
+                $currentLength += $paragraphLength + 2; // +2 for the newlines
+            }
+
+            // If we didn't find enough relevant content, add some from the beginning
+            if ($currentLength < $maxLength / 2) {
+                $remainingLength = $maxLength - $currentLength;
+                $additionalContent = substr($documentText, 0, $remainingLength);
+                $relevantContent = $additionalContent . "\n\n--- CONTENIDO ESPECÍFICO ---\n\n" . $relevantContent;
+            }
+
+            // Add metadata about the search
+            $relevantContent .= "\n\n[BÚSQUEDA REALIZADA CON PALABRAS CLAVE: " . implode(', ', $questionWords) . "]";
+            $relevantContent .= "\n[SECCIONES RELEVANTES ENCONTRADAS: " . count($scoredParagraphs) . "]";
+
+            return $relevantContent ?: substr($documentText, 0, $maxLength) . "\n\n[CONTENIDO PARCIAL - SIN COINCIDENCIAS ESPECÍFICAS]";
+
+        } catch (\Exception $e) {
+            \Log::warning("Error finding relevant content: " . $e->getMessage());
+            // Fallback to truncated full content
+            return strlen($documentText) > $maxLength 
+                ? substr($documentText, 0, $maxLength) . "\n\n[CONTENIDO PARCIAL - ERROR EN BÚSQUEDA]"
+                : $documentText;
         }
     }
 }
