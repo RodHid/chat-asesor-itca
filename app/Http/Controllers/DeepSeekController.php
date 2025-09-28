@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Smalot\PdfParser\Parser;
+use App\Models\ChatSession;
+use App\Models\ChatInteraction;
 
 class DeepSeekController extends Controller
 {
@@ -45,13 +47,23 @@ class DeepSeekController extends Controller
                 ], 500);
             }
 
+            // Track start time for response measurement
+            $startTime = microtime(true);
+
             // Send question with pre-loaded context
             $response = $this->askQuestionWithContext($documentContext, $request->question, $sessionId);
+
+            // Calculate response time
+            $responseTime = (microtime(true) - $startTime) * 1000; // Convert to milliseconds
+
+            // Optionally log the interaction to database
+            $this->logChatInteraction($sessionId, $request->question, $response, $responseTime, $documentContext);
 
             return response()->json([
                 'response' => $response,
                 'session_id' => $sessionId,
-                'context_loaded' => true
+                'context_loaded' => true,
+                'response_time_ms' => round($responseTime)
             ]);
 
         } catch (\Exception $e) {
@@ -420,5 +432,50 @@ class DeepSeekController extends Controller
             'debug_info' => $debugInfo,
             'formatted_message' => $this->formatErrorForChat('Debug Information', $debugInfo)
         ]);
+    }
+
+    /**
+     * Log chat interaction to database (optional)
+     */
+    private function logChatInteraction(string $sessionId, string $question, string $response, float $responseTimeMs, array $documentContext = null)
+    {
+        try {
+            // Only log if database is properly configured
+            if (config('database.default') === 'pgsql' && !empty(config('database.connections.pgsql.database'))) {
+                
+                // Find or create chat session
+                $chatSession = ChatSession::findOrCreateBySessionId($sessionId);
+                
+                // Update session info if we have document context
+                if ($documentContext && !$chatSession->document_processed_at) {
+                    $chatSession->update([
+                        'document_url' => $documentContext['document_url'] ?? null,
+                        'document_length' => $documentContext['total_length'] ?? null,
+                        'document_processed_at' => $documentContext['processed_at'] ?? now(),
+                    ]);
+                }
+
+                // Increment question count
+                $chatSession->incrementQuestions();
+
+                // Log the interaction
+                ChatInteraction::logInteraction(
+                    $sessionId,
+                    $question,
+                    $response,
+                    round($responseTimeMs),
+                    str_contains($response, '❌') ? 'error' : 'success',
+                    [
+                        'document_loaded' => !is_null($documentContext),
+                        'response_length' => strlen($response),
+                    ]
+                );
+
+                \Log::info("Chat interaction logged for session: {$sessionId}");
+            }
+        } catch (\Exception $e) {
+            // Don't let logging errors break the main functionality
+            \Log::warning("Failed to log chat interaction: " . $e->getMessage());
+        }
     }
 }
